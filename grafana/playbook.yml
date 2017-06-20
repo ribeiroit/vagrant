@@ -13,6 +13,14 @@
       when: check_grafana.stdout == ""
       command: /tmp/grafana.sh
 
+    - name: setup repo influxdb
+      template: src=files/influxdb.repo dest=/etc/yum.repos.d/influxdb.repo mode=0644
+
+    - name: install influxdb
+      yum: pkg=influxdb state=present
+      notify:
+        - start influxdb
+
     - name: install grafana
       yum: pkg=grafana state=present
 
@@ -31,12 +39,33 @@
         enabled: yes
         state: started
 
+    - service:
+        name: influxdb
+        enabled: yes
+        state: started
+
     - name: config grafana
       command: sed -r -i 's/^\;protocol/protocol/g; s/^\;http_port/http_port/g; s/^\;domain/domain/g; s/^\;root_url/root_url/g; s/^root_url = (.*)/root_url = %(protocol)s:\/\/%(domain)s:\/grafana/g;' /etc/grafana/grafana.ini
+
+    - name: config influxdb
+      command: sed -r -i 's/\# bind-address/bind-address/g; s/^  \# enabled = false/  enabled = true/g;' /etc/influxdb/influxdb.conf
+      notify:
+        - restart influxdb
+
+    - name: check simple-json install
+      command: grafana-cli plugins ls | grep simple-json
+      register: check_plugin_simple_json
+
+    - name: install plugin
+      when: check_plugin_simple_json.stdout == "" 
+      command: grafana-cli plugins install grafana-simple-json-datasource
       notify:
         - restart grafana
 
-    - name: open port
+    - name: open port influxdb
+      command: firewall-cmd --zone=public --add-port=8086/tcp --permanent
+
+    - name: open port nginx 
       command: firewall-cmd --zone=public --add-port=80/tcp --permanent
 
     - name: reload firewall
@@ -46,7 +75,7 @@
       command: setsebool -P httpd_can_network_connect 1
 
     - name: config nginx
-      template: src=files/nginx.conf.j2 dest=/etc/nginx/conf.d/grafana.conf
+      template: src=files/nginx.conf.j2 dest=/etc/nginx/conf.d/grafana-influxdb.conf
       notify:
         - restart nginx
 
@@ -56,6 +85,12 @@
 
     - name: restart grafana
       service: name=grafana-server state=restarted
+
+    - name: restart influxdb
+      service: name=influxdb state=restarted enabled=yes
+
+    - name: start influxdb
+      service: name=influxdb state=started enabled=yes
 
     - name: start nginx
       service: name=nginx state=started enabled=yes
