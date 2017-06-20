@@ -2,7 +2,7 @@ server {
     server_name _;
     listen *:80;
 
-    location / {
+    location /grafana/ {
         proxy_pass http://localhost:3000/;
     }
 }

@@ -32,7 +32,7 @@
         state: started
 
     - name: config grafana
-      command: sed -i 's/^\;protocol/protocol/g; s/^\;http_port/http_port/g; s/^\;domain/domain/g; s/^\;root_url/root_url/g;' /etc/grafana/grafana.ini
+      command: sed -r -i 's/^\;protocol/protocol/g; s/^\;http_port/http_port/g; s/^\;domain/domain/g; s/^\;root_url/root_url/g; s/^root_url = (.*)/root_url = %(protocol)s:\/\/%(domain)s:\/grafana/g;' /etc/grafana/grafana.ini
       notify:
         - restart grafana
 
