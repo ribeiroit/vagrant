@@ -1,0 +1,64 @@
+---
+- hosts: local
+  sudo: true
+  tasks: 
+    - name: get install grafana
+      get_url: url=https://packagecloud.io/install/repositories/grafana/stable/script.rpm.sh mode=0755 dest=/tmp/grafana.sh
+
+    - name: check grafana script
+      command: ls /tmp/grafana.sh
+      register: check_grafana
+
+    - name: setup repo grafana
+      when: check_grafana.stdout == ""
+      command: /tmp/grafana.sh
+
+    - name: install grafana
+      yum: pkg=grafana state=present
+
+    - name: reload systemd
+      command: /usr/bin/systemctl daemon-reload
+      notify:
+        - start grafana
+    
+    - name: install nginx
+      yum: pkg=nginx state=present
+      notify:
+        - start nginx
+
+    - service:
+        name: firewalld
+        enabled: yes
+        state: started
+
+    - name: config grafana
+      command: sed -i 's/^\;protocol/protocol/g; s/^\;http_port/http_port/g; s/^\;domain/domain/g; s/^\;root_url/root_url/g;' /etc/grafana/grafana.ini
+      notify:
+        - restart grafana
+
+    - name: open port
+      command: firewall-cmd --zone=public --add-port=80/tcp --permanent
+
+    - name: reload firewall
+      command: firewall-cmd --reload
+
+    - name: allow nginx selinux
+      command: setsebool -P httpd_can_network_connect 1
+
+    - name: config nginx
+      template: src=files/nginx.conf.j2 dest=/etc/nginx/conf.d/grafana.conf
+      notify:
+        - restart nginx
+
+  handlers:
+    - name: start grafana
+      service: name=grafana-server state=started enabled=yes
+
+    - name: restart grafana
+      service: name=grafana-server state=restarted
+
+    - name: start nginx
+      service: name=nginx state=started enabled=yes
+
+    - name: restart nginx
+      service: name=nginx state=restarted
